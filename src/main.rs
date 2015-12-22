@@ -21,8 +21,22 @@ extern crate mapreduce;
 use mapreduce::dc::MyDbPool;
 use mapreduce::dc::DataBase;
 
+extern crate time;
+
 fn main() {
     let dsn = "postgresql://postgres:1988lm@localhost/mapreduce";
     let my_pool:MyDbPool = MyDbPool::new(dsn, 1);
     let my_db = DataBase::new("main", Arc::new(my_pool));
+    let create_time = time::get_time().sec;
+    let name = "liming1";
+    let salary = 200;
+    let json_str = format!(r#"
+        {{
+            "name":"{}",
+            "salary": {},
+            "create_time": {}
+        }}
+    "#, name, salary, create_time);
+    let table = my_db.get_table("emp").expect("table not exists.");
+    table.save_by_str(&json_str, "{}");
 }

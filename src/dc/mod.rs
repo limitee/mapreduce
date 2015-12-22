@@ -115,14 +115,16 @@ impl<T:DbPool> DataBase<T> {
             let dc = dc.clone();
             let vec = vec![
                 Column::new("id", "serial", -1, "", false),
-                Column::new("date", "varchar", 20, "not null", false),
-                Column::new("temp", "varchar", 80, "not null", true),
-                Column::new("detail", "varchar", 80, "not null", true),
-                Column::new("wind", "varchar", 80, "not null", true),
-                Column::new("create_time", "timestamp", -1, "default now()", false),
+                Column::new("name", "varchar", 80, "not null", true),
+                Column::new("salary", "integer", -1, "default 0", false),
+                Column::new("create_time", "bigint", -1, "default -1", false),
+                Column::new("version", "integer", -1, "default -1", false),
             ];
-            let table = DataBase::get_table_define("weather", vec, dc);
+            let table = DataBase::get_table_define("emp", vec, dc);
             table_list.insert(table.name.clone(), table);
+        }
+        for (name, table) in table_list.iter() {
+            println!("{}", table.to_ddl_string());
         }
         DataBase {
             name:name.to_string(),
