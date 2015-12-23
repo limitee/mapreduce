@@ -114,15 +114,43 @@ impl<T:DbPool> DataBase<T> {
         {
             let dc = dc.clone();
             let vec = vec![
-                Column::new("id", "serial", -1, "", false),
+                Column::new("id", "serial", -1, "primary key", false),
                 Column::new("name", "varchar", 80, "not null", true),
                 Column::new("salary", "integer", -1, "default 0", false),
                 Column::new("create_time", "bigint", -1, "default -1", false),
+                Column::new("type", "integer", -1, "default -1", false),
                 Column::new("version", "integer", -1, "default -1", false),
             ];
             let table = DataBase::get_table_define("emp", vec, dc);
             table_list.insert(table.name.clone(), table);
         }
+        {
+            let dc = dc.clone();
+            let vec = vec![
+                Column::new("id", "serial", -1, "primary key", false),
+                Column::new("app_id", "integer", -1, "default 0", false),
+                Column::new("device_id", "integer", -1, "default 0", false),
+                Column::new("date", "varchar", 20, "not null", false),
+                Column::new("type", "integer", -1, "default 0", false),
+                Column::new("rtype", "integer", -1, "default 0", false),
+                Column::new("media", "integer", -1, "default 0", false),
+                Column::new("placement", "integer", -1, "default 0", false),
+            ];
+            let table = DataBase::get_table_define("raw", vec, dc);
+            table_list.insert(table.name.clone(), table);
+        }
+        {
+            let dc = dc.clone();
+            let vec = vec![
+                Column::new("id", "serial", -1, "primary key", false),
+                Column::new("app_id", "integer", -1, "default 0", false),
+                Column::new("device_id", "integer", -1, "default 0", false),
+                Column::new("count", "integer", -1, "default 0", false),
+            ];
+            let table = DataBase::get_table_define("raw_tmp", vec, dc);
+            table_list.insert(table.name.clone(), table);
+        }
+
         for (name, table) in table_list.iter() {
             println!("{}", table.to_ddl_string());
         }
@@ -138,4 +166,7 @@ impl<T:DbPool> DataBase<T> {
         self.table_list.get(name)
     }
 
+    pub fn execute(&self, sql:&str) -> Result<Json, i32> {
+        Result::Ok(self.dc.execute(sql)) 
+    }
 }
