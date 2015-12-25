@@ -1,0 +1,7 @@
+```
+create table raw_201512 (app_id integer default 0,date varchar(20) not null,device_id integer default 0,id serial primary key,media integer default 0,placement integer default 0,rtype integer default 0,type integer default 0);
+```
+
+```
+INSERT INTO raw_201512 SELECT * FROM raw WHERE id < 100;
+```
