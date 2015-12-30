@@ -50,7 +50,7 @@ impl MyDbPool {
 impl DbPool for MyDbPool {
 
     fn execute(&self, sql:&str) -> Json {
-        println!("{}", sql);
+        //println!("{}", sql);
         let between = Range::new(0, self.conns.len());
         let mut rng = rand::thread_rng();
         let rand_int = between.ind_sample(&mut rng);

@@ -5,3 +5,18 @@ create table raw_201512 (app_id integer default 0,date varchar(20) not null,devi
 ```
 INSERT INTO raw_201512 SELECT * FROM raw WHERE id < 100;
 ```
+
+#查看所有数据库
+```
+\l
+```
+
+#数据库目录路径
+```
+select oid,datname from pg_database;
+```
+
+#文件目录
+```
+/base
+```

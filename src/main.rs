@@ -25,6 +25,8 @@ extern crate mapreduce;
 use mapreduce::dc::MyDbPool;
 use mapreduce::dc::DataBase;
 
+use std::thread;
+
 extern crate time;
 
 lazy_static! {
@@ -44,24 +46,41 @@ fn get_string(vec:&Vec<String>) -> String {
     vec.get(random).unwrap().clone()
 }
 
-fn get_raw() -> Result<String, i32> {
+pub fn get_time() -> i64 {
+    let now = time::get_time();
+    now.sec*1000 + (now.nsec/1000000) as i64
+}
+
+pub fn get_raw() -> Result<String, i32> {
     let app_id = 55406;
-    let date = 20151223;
-    let device_id = RandUtil::get_int(1, 10000);
+    let date = 20151224;
+    let device_id = RandUtil::get_int(1, 100);
     let raw_type = RandUtil::get_int(0, 14);
-    let media = RandUtil::get_int(1, 50);
-    let placement = RandUtil::get_int(1, 50);
+    let mut p_value = 0;
+    if raw_type == 12 || raw_type == 13 {
+        p_value = RandUtil::get_int(1, 50);
+    }
+    let mut rtype = raw_type;
+    if rtype == 2 {
+        if RandUtil::get_int(0, 2) == 0 {
+            rtype = 0;
+        }
+    }
+    let media = RandUtil::get_int(1, 6);
+    let placement = RandUtil::get_int(1, 6);
     let create_time = time::get_time().sec;
+    let tkstamp = create_time - RandUtil::get_int(10, 30) as i64;
     let keyword = get_string(&VEC_KEYWORD);
     let source_type = RandUtil::get_int(0, 2);
     let appv = get_string(&VEC_APPV);
     let subchannel = get_string(&VEC_SUBCHANNEL);
     let crea = get_string(&VEC_CREA);
-    let region_id = RandUtil::get_int(1, 10001);
+    let region_id = RandUtil::get_int(1, 100);
     let brand = get_string(&VEC_BRAND);
     let sdkv = get_string(&VEC_SDKV);
     let net = get_string(&VEC_NET);
     let model = get_string(&VEC_MODEL);
+    let extra = RandUtil::get_int(0, 2);
     let str = format!(r#"
         {{
             "app_id": {},
@@ -72,6 +91,7 @@ fn get_raw() -> Result<String, i32> {
             "media": {},
             "placement": {},
             "created_at": {},
+            "tkStamp": {},
             "accessed_at": {},
             "keyword": "{}",
             "source_type": {},
@@ -82,15 +102,17 @@ fn get_raw() -> Result<String, i32> {
             "sdkv":"{}",
             "net":"{}",
             "model":"{}",
-            "region_id": {}
+            "region_id": {},
+            "extra": {},
+            "purchase_value": {}
         }}
-    "#, app_id, date, device_id, raw_type, raw_type, media, placement, create_time, create_time, keyword, source_type, appv, subchannel, crea, brand, sdkv, net, model, region_id);
+    "#, app_id, date, device_id, raw_type, rtype, media, placement, create_time, tkstamp, create_time, keyword, source_type, appv, subchannel, crea, brand, sdkv, net, model, region_id, extra, p_value);
     Result::Ok(str)
 }
 
 fn main() {
     let dsn = "postgresql://postgres:1988lm@localhost/mapreduce";
-    let my_pool:MyDbPool = MyDbPool::new(dsn, 1);
+    let my_pool:MyDbPool = MyDbPool::new(dsn, 25);
     let my_db = DataBase::new("main", Arc::new(my_pool));
     let create_time = time::get_time().sec;
     let name = "liming";
@@ -104,12 +126,27 @@ fn main() {
             "type": {}
         }}
     "#, name, salary, create_time, emp_type);
-    let table = my_db.get_table("emp").expect("table not exists.");
+    //let table = my_db.get_table("emp").expect("table not exists.");
     //table.save_by_str(&json_str, "{}");
-
-    let raw_table = my_db.get_table("raw").expect("raw table not exists");
-    for _ in 0..1000 {
-        let raw = get_raw().unwrap();
-        raw_table.save_by_str(&raw, "{}");
-    }
+    let thread_count = 20;
+    let save_count = 100000;
+    let start = get_time();
+    let arc_db = Arc::new(my_db);
+    let threads: Vec<_> = (0..thread_count).map(|i| {
+        let arc_db = arc_db.clone();
+        thread::spawn(move || {
+            let raw_table = arc_db.get_table("raw").unwrap();
+            for _ in 0..save_count {
+                let raw = get_raw().unwrap();
+                raw_table.save_by_str(&raw, "{}");
+            }
+        })
+    }).collect();
+    let _: Vec<_> = threads.into_iter().map(|thread| {
+        thread.join()
+    }).collect();
+    let end = get_time();
+    let used = (end - start)/1000;
+    let average = (thread_count*save_count)/used;
+    println!("{} data per s. used {} s. {} threads.", average, used, thread_count);
 }

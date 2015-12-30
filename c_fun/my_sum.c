@@ -56,3 +56,56 @@ type_sum(PG_FUNCTION_ARGS)
         PG_RETURN_INT32(state);
     }
 }
+
+/* by value */
+PG_FUNCTION_INFO_V1(ctd_count);
+
+Datum
+ctd_count(PG_FUNCTION_ARGS)
+{
+    int32 state = PG_GETARG_INT32(0);
+    int32 target_type = PG_GETARG_INT32(1);
+    if(target_type == 2)
+    {
+        int32 created_at = PG_GETARG_INT32(2);
+        int32 tkStamp = PG_GETARG_INT32(3);
+        if(created_at - tkStamp < 20)
+        {
+            PG_RETURN_INT32(state + 1);
+        }
+        else
+        {
+            PG_RETURN_INT32(state);
+        }
+    }
+    else
+    {
+        PG_RETURN_INT32(state);
+    }
+}
+
+/* by value */
+PG_FUNCTION_INFO_V1(repeat_count);
+
+Datum
+repeat_count(PG_FUNCTION_ARGS)
+{
+    int32 state = PG_GETARG_INT32(0);
+    int32 target_type = PG_GETARG_INT32(1);
+    if(target_type == 2)
+    {
+        int32 rtype = PG_GETARG_INT32(2);
+        if(rtype != 2)
+        {
+            PG_RETURN_INT32(state + 1);
+        }
+        else
+        {
+            PG_RETURN_INT32(state);
+        }
+    }
+    else
+    {
+        PG_RETURN_INT32(state);
+    }
+}
