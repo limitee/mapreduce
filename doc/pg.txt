@@ -1,8 +1,4 @@
 ```
-create table raw_201512 (app_id integer default 0,date varchar(20) not null,device_id integer default 0,id serial primary key,media integer default 0,placement integer default 0,rtype integer default 0,type integer default 0);
-```
-
-```
 INSERT INTO raw_201512 SELECT * FROM raw WHERE id < 100;
 ```
 
@@ -20,3 +16,105 @@ select oid,datname from pg_database;
 ```
 /base
 ```
+
+#把一列的多种类型，转化成多列
+```
+select date,
+          sum(case when type = 'OSX' then val end) as osx,
+          sum(case when type = 'Windows' then val end) as windows,
+          sum(case when type = 'Linux' then val end) as linux
+     from daily_visits_per_os
+ group by date
+ order by date
+    limit 4;
+```
+
+
+#INSERT ... ON CONFLICT DO NOTHING/UPDATE ("UPSERT")
+9.5 brings support for "UPSERT" operations.
+INSERT is extended to accept an ON CONFLICT DO UPDATE/IGNORE clause. This clause specifies an alternative action to take in the event of a would-be duplicate violation.
+For example, if we have a simple table with user accounts logins where we wanted to track the number of times that user had logged in:
+```
+ # SELECT username, logins FROM user_logins;
+  username | logins
+ ----------+--------
+  James    |      4
+  Lois     |      2
+ (2 rows)
+```
+
+And we wanted to add 2 new logins, normally we'd have a problem if the primary key (or unique constraint) was violated:
+```
+ # INSERT INTO user_logins (username, logins)
+   VALUES ('Naomi',1),('James',1);
+ ERROR:  duplicate key value violates unique constraint "users_pkey"
+ DETAIL:  Key (username)=(James) already exists.
+```
+
+Unlike approaches using a Common Table Expression, the new command has no race conditions, guaranteeing either an insert or an update (provided there is no incidental error). ON CONFLICT DO UPDATE safely guarantees "insert-or-update" semantics, with no risk of the statement failing to perform one of those two actions for each row proposed for insertion (unless there was an independent error). Unlike SQL MERGE as implemented in other database systems, there is no implementation or semantic restriction that burdens users with having to consider that their UPSERT might fail due to a concurrent operation. In short, the new "UPSERT" feature is designed to be both as simple and as safe as possible.
+Further example of new syntax:
+```
+ INSERT INTO user_logins (username, logins)
+ VALUES ('Naomi',1),('James',1)
+ ON CONFLICT (username)
+ DO UPDATE SET logins = user_logins.logins + EXCLUDED.logins;
+```
+Now let's look at what happened:
+```
+ # SELECT username, logins FROM user_logins;
+  username | logins
+ ----------+--------
+  Lois     |      2
+  Naomi    |      1
+  James    |      5
+ (3 rows)
+```
+We have a new row for Naomi, which shows her having logged in once, but then we also have James whose logins value has incremented by one as specified by the UPDATE part of the statement. The UPDATE statement knows which rows it's updating based on the column or unique constraint that's being checked against.
+Of course there are scenarios where you might want to insert a value into a table, but only if it's not there already.
+Say we had a list of countries which would be used to constrain values in other tables:
+```
+ # SELECT * FROM countries;
+   country
+ -----------
+  Australia
+  Italy
+  Japan
+  UK
+  USA
+ (5 rows)
+```
+We want to add 2 more countries. If one or more of them already existed and violated the primary key (in this case the "country" column), we'd get an error:
+```
+ # INSERT INTO countries (country) VALUES ('France'),('Japan');
+ ERROR:  duplicate key value violates unique constraint "countries_pkey"
+ DETAIL:  Key (country)=(Japan) already exists.
+```
+But now we can tell it that a conflict is fine, and just DO NOTHING in those scenarios:
+```
+ # INSERT INTO countries (country) VALUES ('France'),('Japan') ON CONFLICT DO NOTHING;
+ INSERT 0 1
+```
+Now we should just have one additional country in our table:
+```
+# SELECT * FROM countries;
+   country
+ -----------
+  Australia
+  Italy
+  Japan
+  UK
+  USA
+  France
+ (6 rows)
+```
+If there were additional columns, that were also uniquely-constrained, we could specify the constraint or column that we want to apply the condition to, so that a "legitimate" conflict on another column produces an error.
+So, to clarify our intent, we could have written the last example as:
+```
+# INSERT INTO countries (country) VALUES ('France'),('Japan') ON CONFLICT ON CONSTRAINT countries_pkey DO NOTHING;
+```
+or
+```
+ # INSERT INTO countries (country) VALUES ('France'),('Japan') ON CONFLICT (country) DO NOTHING;
+```
+However, the former isn't really fully equivalent to the latter, because the "inference" based syntax is more robust against things like schema migrations that result in a new name for essentially the same constraint/business rule. Users should prefer the latter (unless it's unavoidable, as with exclusion constraints).
+Note that providing multiple sets of conflict/update conditions isn't supported, so if a specific conflict is specified, but another conflict occurs instead, it will produce a conflict error like it would with a normal insert.

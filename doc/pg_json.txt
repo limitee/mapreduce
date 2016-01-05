@@ -1,0 +1,121 @@
+JSONB-modifying operators and functions
+
+In 9.3 (and to a greater extent in 9.4), JSONB data could be extracted using various functions and operators, but nothing that could actually modify the data. As of 9.5, JSONB data can now be modified.
+```
+jsonb || jsonb (concatenate / overwrite)
+```
+The || operator allows us to combine 2 jsonb objects. If there's overlap, values are replaced on the highest level.
+For example, if we want to add values to a jsonb object:
+```
+ # SELECT '{"name": "Joe", "age": 30}'::jsonb || '{"town": "London"}'::jsonb;
+                    ?column?
+ ----------------------------------------------
+  {"age": 30, "name": "Joe", "town": "London"}
+ (1 row)
+```
+Or we can overwrite existing values:
+```
+ # SELECT '{"town": "Dataville", "population": 4096}'::jsonb || '{"population": 8192}'::jsonb;
+                  ?column?
+ -------------------------------------------
+  {"town": "Dataville", "population": 8192}
+ (1 row)
+```
+Note that this only works on the highest level, so nested objects are replaced from the top level. For example:
+```
+ # SELECT '{"name": "Jane", "contact": {"phone": "01234 567890", "mobile": "07890 123456"}}'::jsonb || '{"contact": {"fax": "01987 654321"}}'::jsonb;
+                        ?column?
+ ------------------------------------------------------
+  {"name": "Jane", "contact": {"fax": "01987 654321"}}
+ (1 row)
+```
+jsonb - text / int (remove key / array element)
+We can remove keys from a jsonb object with the - operator:
+  # SELECT '{"name": "James", "email": "james@localhost"}'::jsonb - 'email';
+       ?column?
+  -------------------
+   {"name": "James"}
+  (1 row)
+Or remove values from an array (base 0):
+ # SELECT '["red","green","blue"]'::jsonb - 1;
+     ?column?
+ -----------------
+  ["red", "blue"]
+ (1 row)
+jsonb #- text[] / int (remove key / array element in path)
+The previous example, we can remove keys or array elements, but not any lower than the highest level, so we can provide a path to the value we want to delete using a text array. Here we'll want to remove the fax number from within the contact value:
+ # SELECT '{"name": "James", "contact": {"phone": "01234 567890", "fax": "01987 543210"}}'::jsonb #- '{contact,fax}'::text[];
+                         ?column?
+ ---------------------------------------------------------
+  {"name": "James", "contact": {"phone": "01234 567890"}}
+ (1 row)
+Or we can remove an array value. Here we'll get rid of the array value as index 1 (2nd value):
+ # SELECT '{"name": "James", "aliases": ["Jamie","The Jamester","J Man"]}'::jsonb #- '{aliases,1}'::text[];
+                      ?column?
+ --------------------------------------------------
+  {"name": "James", "aliases": ["Jamie", "J Man"]}
+ (1 row)
+jsonb_set function
+The above lets us delete values in a path, but not update them, so we have the jsonb_set function for that. We'll update the phone value within the contact value:
+ # SELECT jsonb_set('{"name": "James", "contact": {"phone": "01234 567890", "fax": "01987 543210"}}'::jsonb,
+            '{contact,phone}',
+            '"07900 112233"'::jsonb);
+                                  jsonb_replace
+ --------------------------------------------------------------------------------
+  {"name": "James", "contact": {"fax": "01987 543210", "phone": "07900 112233"}}
+ (1 row)
+The anatomy of this function is:
+ jsonb_set(
+   target jsonb,           # The jsonb value you're amending.
+   path text[],            # The path to the value you wish to add to or change, represented as a text array.
+   new_value jsonb,        # The new object, key : value pair or array value(s) to add to or change.
+   create_missing boolean  # An optional field that, if true (default), creates the value if the key doesn't already exist.
+                           #   If false, the path must exist for the update to happen, or the value won't be updated.
+ )
+If the target key doesn't exist, and you specify true as a fourth parameter (the default), it will be appended at the location specified by the path:
+ # SELECT jsonb_set('{"name": "James", "contact": {"phone": "01234 567890", "fax": "01987 543210"}}'::jsonb,
+            '{contact,skype}',
+            '"myskypeid"'::jsonb,
+            true);
+                                               jsonb_set
+ ------------------------------------------------------------------------------------------------------
+  {"name": "James", "contact": {"fax": "01987 543210", "phone": "01234 567890", "skype": "myskypeid"}}
+ (1 row)
+The same function call, but using false instead of true will not update in this case because there's no pre-existing key to update.
+ # SELECT jsonb_set(
+            '{"name": "James", "contact": {"phone": "01234 567890", "fax": "01987 543210"}}'::jsonb,
+            '{contact,skype}',
+            '"myskypeid"'::jsonb,
+            false);                                   jsonb_set
+ --------------------------------------------------------------------------------
+  {"name": "James", "contact": {"fax": "01987 543210", "phone": "01234 567890"}}
+ (1 row)
+Or you can set the value of array elements by specifying its position. The position start from 0, so the 2nd element is 1. Negative values start from the end backward, so the last element is -1, 2nd to last is -2.
+ # SELECT jsonb_set('{"name": "James", "skills": ["design","snowboarding","mechnaicalengineering"]}',
+            '{skills,2}',
+            '"mechanical engineering"'::jsonb,
+            true);
+                                      jsonb_set
+ -----------------------------------------------------------------------------------
+  {"name": "James", "skills": ["design", "snowboarding", "mechanical engineering"]}
+ (1 row)
+
+So the positions in this array can be referred to like so:
+      0             1                    2           # positive values
+     -3            -2                   -1           # negative values
+ ["design", "snowboarding", "mechanical engineering"]
+With this array, -4 or anything lower would append to the beginning. 3 or anything higher would append to the end.
+jsonb_pretty
+Notice that jsonb doesn't preserve white-space, so no matter how much effort you put in to make the object easier to read, it will end up as a long string. Well jsonb_pretty will format it for you. If we use the previous jsonb example and wrap it all in a jsonb_pretty function:
+ # SELECT jsonb_pretty(jsonb_set('{"name": "James", "contact": {"phone": "01234 567890", "fax": "01987 543210"}}'::jsonb, '{contact,phone}', '"07900 112233"'::jsonb));
+           jsonb_pretty
+ ---------------------------------
+  {                              +
+      "name": "James",           +
+      "contact": {               +
+          "fax": "01987 543210", +
+          "phone": "07900 112233"+
+      }                          +
+  }
+ (1 row)
+Much easier to read.
